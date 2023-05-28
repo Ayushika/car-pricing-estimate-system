@@ -8,44 +8,73 @@ import {
   Patch,
   Delete,
   NotFoundException,
+  Session,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from 'src/guards/auth.guard';
 import { Serialize } from 'src/interceptors/serialize.interceptor';
+import { AuthService } from './auth.service';
+import { CurrentUser } from './decorator/current-user.decorator';
 import { CreateUserDTO } from './dtos/create-user.dto';
 import { UpdateUserDTO } from './dtos/update-user.dto';
 import { UserDTO } from './dtos/user.dto';
+import { User } from './user.entity';
 import { UsersService } from './users.service';
-UserDTO;
 
 @Controller('auth')
 @Serialize(UserDTO)
 export class UsersController {
-  constructor(private service: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private authService: AuthService,
+  ) {}
+
+  @Get('/whoami')
+  @UseGuards(AuthGuard)
+  whoAmI(@CurrentUser() user: User) {
+    return user;
+  }
+
+  @Post('/signout')
+  signOut(@Session() session: any) {
+    session.userId = null;
+  }
 
   @Post('/signup')
-  createUser(@Body() body: CreateUserDTO) {
+  async createUser(@Body() body: CreateUserDTO, @Session() session: any) {
     const { email, password } = body;
-    this.service.create({ email, password });
+    const user = await this.authService.signup({ email, password });
+    session.userId = user.id;
+    return user;
+  }
+
+  @Post('/signin')
+  async signin(@Body() body: CreateUserDTO, @Session() session: any) {
+    const { email, password } = body;
+    const user = await this.authService.signIn({ email, password });
+    session.userId = user.id;
+    return user;
   }
 
   @Get('/:id')
   async findUser(@Param('id') id: string) {
-    const user = await this.service.findOne(parseInt(id));
+    const user = await this.usersService.findOne(parseInt(id));
     if (!user) throw new NotFoundException('user not found');
     return user;
   }
 
   @Get()
   findAllUsers(@Query('email') email: string) {
-    return this.service.find(email);
+    return this.usersService.find(email);
   }
 
   @Patch('/:id')
   updateUser(@Param('id') id: string, @Body() body: UpdateUserDTO) {
-    return this.service.update(parseInt(id), body);
+    return this.usersService.update(parseInt(id), body);
   }
 
   @Delete('/:id')
   removeUser(@Param('id') id: string) {
-    return this.service.remove(parseInt(id));
+    return this.usersService.remove(parseInt(id));
   }
 }
